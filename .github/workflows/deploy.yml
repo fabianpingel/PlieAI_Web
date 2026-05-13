@@ -1,0 +1,68 @@
+# Dieser Workflow baut die App automatisch und veröffentlicht sie auf GitHub Pages.
+# Er wird bei jedem Push auf den main-Branch ausgelöst.
+#
+# Ablauf:
+#   1. Code auschecken
+#   2. Node.js installieren
+#   3. npm install (Abhängigkeiten laden)
+#   4. npm run build (App bauen → dist/ Ordner)
+#   5. dist/ Ordner auf GitHub Pages hochladen
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]  # Nur bei Änderungen auf main auslösen
+
+# Berechtigungen für GitHub Pages Deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Verhindert parallele Deployments (zweites wartet auf das erste)
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      # Code aus dem Repository laden
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      # Node.js in Version 22 installieren (mit npm-Cache für schnellere Builds)
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Abhängigkeiten installieren (npm ci = reproduzierbar, schneller als npm install)
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      # App bauen (erzeugt den dist/ Ordner mit HTML/CSS/JS)
+      - name: App bauen
+        run: npm run build
+
+      # GitHub Pages vorbereiten
+      - name: GitHub Pages konfigurieren
+        uses: actions/configure-pages@v5
+
+      # Gebauten dist/ Ordner hochladen
+      - name: Build hochladen
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      # Auf GitHub Pages veröffentlichen
+      - name: Auf GitHub Pages deployen
+        uses: actions/deploy-pages@v4
+        id: deployment
