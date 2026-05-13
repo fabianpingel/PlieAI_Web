@@ -1,0 +1,23 @@
+# Installierte JavaScript-Pakete (werden per npm install neu generiert)
+node_modules/
+
+# Fertig gebaute App (wird per npm run build neu generiert)
+dist/
+
+# Python: Virtuelle Umgebung der Konvertierungsscripts
+tools/.venv/
+
+# TypeScript Build-Cache
+*.tsbuildinfo
+
+# Editor-spezifische Dateien
+.vscode/
+.idea/
+*.swp
+
+# Betriebssystem-Dateien
+.DS_Store
+Thumbs.db
+
+# Lokale Umgebungsvariablen (falls nötig)
+.env.local

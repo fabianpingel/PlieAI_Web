@@ -1,0 +1,14 @@
+[project]
+name = "plieai-tools"
+version = "0.1.0"
+description = "Konvertierungsscripts für PlieAI_Web (sklearn → ONNX, NumPy → JSON)"
+requires-python = ">=3.11"
+dependencies = [
+    "scikit-learn>=1.4.0",
+    "numpy>=1.24.0",
+    "skl2onnx>=1.16.0",
+    "onnxruntime>=1.18.0",
+]
+
+[dependency-groups]
+dev = []

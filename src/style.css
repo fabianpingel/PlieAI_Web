@@ -1,0 +1,27 @@
+/* Tailwind CSS v4: ein einziger Import reicht */
+@import "tailwindcss";
+
+/*
+  Farbpalette — abgeleitet vom Sinica Wingen Studio-Logo:
+  - plie-apricot:  das warme Orange-Pfirsich des Tänzer-Logos
+  - plie-rose:     kindgerechtes Rosa als Ergänzung
+  - plie-dark:     das dunkle Grau des Studio-Textes
+  - plie-cream:    warmes Cremeweiß als Hintergrund
+*/
+@theme {
+  --color-plie-apricot:       #f0a868;
+  --color-plie-apricot-light: #fde8d8;
+  --color-plie-rose:          #e8829e;
+  --color-plie-rose-light:    #fde8ef;
+  --color-plie-dark:          #4a4646;
+  --color-plie-muted:         #9c9a9a;
+  --color-plie-cream:         #fef8f5;
+  --color-plie-white:         #ffffff;
+  --color-plie-success:       #4e9e3e;
+}
+
+/* Verhindert Überscrollen auf Mobilgeräten (wichtig für Kamera-Apps) */
+html, body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}

@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    // Welche JavaScript-Version wird als Ziel verwendet
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    // Modulformat: ESNext ist modern und wird von Vite bevorzugt
+    "module": "ESNext",
+    // Welche JavaScript-APIs stehen zur Verfügung (Browser-APIs eingeschlossen)
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    // Überspringe Typprüfung von node_modules (spart Zeit)
+    "skipLibCheck": true,
+    // Wie TypeScript Module auflöst (Vite-optimiert)
+    "moduleResolution": "bundler",
+    // Erlaubt Importe mit .ts-Endung (Vite verarbeitet das)
+    "allowImportingTsExtensions": true,
+    // Erlaubt Import von JSON-Dateien
+    "resolveJsonModule": true,
+    // Jede Datei wird isoliert kompiliert (schneller, sicherer)
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    // TypeScript prüft nur, gibt aber keine Dateien aus (Vite übernimmt die Ausgabe)
+    "noEmit": true,
+    // Nötig für Vue Single-File-Components (.vue Dateien)
+    "jsx": "preserve",
+    // Strikte Typrüfung: fängt viele Fehler früh ab
+    "strict": true
+  },
+  // Welche Dateien TypeScript prüfen soll
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"]
+}
