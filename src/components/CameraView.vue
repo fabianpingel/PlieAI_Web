@@ -21,6 +21,83 @@
     <!-- Canvas: zeigt Kamerabild + Pose-Overlay übereinander -->
     <canvas ref="canvasEl" class="w-full h-full object-cover" />
 
+    <!-- ── Rep-Zähler oben rechts (immer sichtbar während Übung läuft) ─── -->
+    <div
+      v-if="status === 'running' && !showSuccess"
+      class="absolute top-3 right-3 bg-white/90 backdrop-blur rounded-2xl px-3 py-2 shadow-lg flex items-center gap-2"
+    >
+      <span class="text-2xl font-bold text-plie-apricot">{{ reps }}</span>
+      <span class="text-sm text-plie-muted">/ {{ TARGET_REPS }}</span>
+    </div>
+
+    <!-- ── Halte-Fortschritt (Ring um Rep-Zähler) während Pose gehalten wird ── -->
+    <div
+      v-if="status === 'running' && !showSuccess && holdProgress > 0"
+      class="absolute top-3 right-3 pointer-events-none"
+    >
+      <!--
+        SVG-Kreis als Fortschritts-Ring.
+        stroke-dasharray = Umfang, stroke-dashoffset wird animiert (0 = voll).
+      -->
+      <svg width="64" height="64" viewBox="0 0 64 64" class="-rotate-90">
+        <circle
+          cx="32" cy="32" r="28"
+          fill="none"
+          stroke="#f0a868"
+          stroke-width="4"
+          stroke-linecap="round"
+          :stroke-dasharray="175.93"
+          :stroke-dashoffset="175.93 * (1 - holdProgress)"
+          style="transition: stroke-dashoffset 0.1s linear"
+        />
+      </svg>
+    </div>
+
+    <!-- ── Konfetti-Burst bei erfolgreichem Rep ────────────────────────── -->
+    <Transition name="confetti">
+      <div
+        v-if="showConfetti"
+        class="absolute inset-0 flex items-center justify-center pointer-events-none"
+      >
+        <div class="text-7xl confetti-bounce">✨</div>
+        <span
+          v-for="(emoji, i) in confettiEmojis"
+          :key="i"
+          class="absolute text-4xl confetti-particle"
+          :style="{
+            left: `${50 + (i - 4) * 8}%`,
+            animationDelay: `${i * 0.05}s`,
+          }"
+        >{{ emoji }}</span>
+      </div>
+    </Transition>
+
+    <!-- ── Erfolgs-Screen nach 5 Reps ──────────────────────────────────── -->
+    <Transition name="fade">
+      <div
+        v-if="showSuccess"
+        class="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-plie-apricot/95 to-plie-rose/95"
+      >
+        <div class="text-7xl">🎉</div>
+        <h3 class="text-2xl font-bold text-white text-center px-4">Super gemacht!</h3>
+        <p class="text-white text-sm px-6 text-center">{{ TARGET_REPS }} mal geschafft!</p>
+        <div class="flex gap-3 mt-2">
+          <button
+            class="px-5 py-3 rounded-xl bg-white text-plie-apricot font-bold shadow-lg active:scale-95"
+            @click="resetReps"
+          >
+            ↻ Nochmal
+          </button>
+          <button
+            class="px-5 py-3 rounded-xl bg-plie-dark text-white font-bold shadow-lg active:scale-95"
+            @click="$emit('back')"
+          >
+            Andere Pose
+          </button>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Lade-Overlay: wird angezeigt solange Kamera oder Modell noch laden -->
     <Transition name="fade">
       <div
@@ -57,6 +134,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { PoseDetector }   from '../core/poseDetector'
 import { PoseClassifier } from '../core/poseClassifier'
 import { embedPose }      from '../core/poseEmbedder'
+import { addReps }        from '../core/storage'
 import {
   drawVideoFrame,
   drawSkeleton,
@@ -77,10 +155,47 @@ const emit = defineEmits<{
   back: []
 }>()
 
+// ── Konstanten für den Rep-Zähler ─────────────────────────────────────────────
+
+/** Wie oft die Pose gehalten werden muss um die Übung abzuschließen. */
+const TARGET_REPS = 5
+
+/** Mindest-Konfidenz (0..1) damit eine Pose als korrekt gilt. */
+const HOLD_THRESHOLD = 0.70
+
+/** Wie lange die Konfidenz durchgehend über der Schwelle liegen muss (in ms). */
+const HOLD_DURATION_MS = 3000
+
+/** Dauer der Konfetti-Animation nach erfolgreichem Rep (in ms). */
+const CONFETTI_DURATION_MS = 1200
+
+/** Emojis für den Konfetti-Burst (zufällige Auswahl wird gerendert). */
+const confettiEmojis: string[] = ['🌟', '⭐', '✨', '🎀', '💫', '🌸', '⭐', '✨', '🌟']
+
 // ── Status der Komponente ─────────────────────────────────────────────────────
 
 type Status = 'loading' | 'running' | 'error'
 const status = ref<Status>('loading')
+
+// ── Rep-Zähler Zustand ────────────────────────────────────────────────────────
+
+/** Anzahl erfolgreich gehaltener Posen in dieser Übungs-Session. */
+const reps = ref<number>(0)
+
+/** Halte-Fortschritt 0..1 — wird im Ring um den Rep-Zähler angezeigt. */
+const holdProgress = ref<number>(0)
+
+/** Konfetti-Burst sichtbar (kurz nach jedem erfolgreichen Rep). */
+const showConfetti = ref<boolean>(false)
+
+/** Erfolgs-Screen sichtbar (nach Erreichen von TARGET_REPS). */
+const showSuccess = ref<boolean>(false)
+
+/**
+ * Zeitstempel (timestamp aus requestAnimationFrame) an dem die Pose
+ * erstmals über der Schwelle lag. null = aktuell nicht im Halte-Zustand.
+ */
+let holdStartTime: number | null = null
 
 /** Icon und Text je nach Status */
 const statusIcon = computed(() => ({
@@ -262,12 +377,80 @@ function detectionLoop(timestamp: DOMHighResTimeStamp): void {
     // Konfidenz-Balken zeichnen
     drawConfidenceBar(ctx, props.targetPose, confidence, w, h)
 
+    // Rep-Zähler aktualisieren (siehe Funktion unten)
+    updateRepCounter(confidence, timestamp)
+
   } else if (result) {
     // MediaPipe läuft, aber keine Person im Bild
     drawNotDetected(ctx, w, h)
+    // Person nicht erkannt → Halte-Timer zurücksetzen
+    updateRepCounter(0, timestamp)
   }
 
   requestAnimationFrame(detectionLoop)
+}
+
+// ── Rep-Zähler Logik ──────────────────────────────────────────────────────────
+
+/**
+ * Wird in jedem Frame der Erkennungs-Schleife aufgerufen.
+ *
+ * Wenn die Konfidenz für die Ziel-Pose über HOLD_THRESHOLD liegt, läuft
+ * ein Timer. Übersteigt die ununterbrochene Haltezeit HOLD_DURATION_MS,
+ * wird ein Rep gezählt und Konfetti gezeigt. Bei jedem Frame unter der
+ * Schwelle wird der Timer zurückgesetzt.
+ *
+ * Args:
+ *     confidence: Aktuelle Konfidenz der Ziel-Pose (0..1).
+ *     timestamp: requestAnimationFrame-Zeitstempel in Millisekunden.
+ */
+function updateRepCounter(confidence: number, timestamp: DOMHighResTimeStamp): void {
+  // Wenn Ziel bereits erreicht oder Erfolgs-Screen offen ist → nichts tun
+  if (showSuccess.value) return
+
+  if (confidence >= HOLD_THRESHOLD) {
+    // Pose wird (weiterhin) korrekt gehalten
+    if (holdStartTime === null) {
+      holdStartTime = timestamp
+    }
+    const elapsed = timestamp - holdStartTime
+    holdProgress.value = Math.min(elapsed / HOLD_DURATION_MS, 1)
+
+    if (elapsed >= HOLD_DURATION_MS) {
+      // ── Rep erfolgreich! ──
+      reps.value += 1
+      holdStartTime = null
+      holdProgress.value = 0
+      triggerConfetti()
+
+      // Persistenter Fortschritt: in localStorage hochzählen
+      addReps(props.targetPose, 1)
+
+      if (reps.value >= TARGET_REPS) {
+        // Kurze Pause damit das Konfetti sichtbar bleibt, dann Erfolgs-Screen
+        setTimeout(() => { showSuccess.value = true }, CONFETTI_DURATION_MS)
+      }
+    }
+  } else {
+    // Konfidenz zu niedrig → Halte-Timer zurücksetzen
+    holdStartTime = null
+    holdProgress.value = 0
+  }
+}
+
+/** Zeigt den Konfetti-Burst kurz an. */
+function triggerConfetti(): void {
+  showConfetti.value = true
+  setTimeout(() => { showConfetti.value = false }, CONFETTI_DURATION_MS)
+}
+
+/** Setzt Rep-Zähler komplett zurück (für "Nochmal"-Button und Pose-Wechsel). */
+function resetReps(): void {
+  reps.value = 0
+  holdStartTime = null
+  holdProgress.value = 0
+  showSuccess.value = false
+  showConfetti.value = false
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -302,6 +485,7 @@ onUnmounted(() => {
 // Neue Referenz-Pose laden wenn der Nutzer die Übung wechselt
 watch(() => props.targetPose, async (newPose) => {
   referencePose = null
+  resetReps()
   await loadReferencePose(newPose)
 })
 </script>
@@ -316,5 +500,42 @@ watch(() => props.targetPose, async (newPose) => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* ── Konfetti-Animationen ──────────────────────────────────────────────── */
+
+/* Sanftes Ein-/Ausblenden des Konfetti-Containers */
+.confetti-enter-active {
+  transition: opacity 0.15s ease;
+}
+.confetti-leave-active {
+  transition: opacity 0.4s ease;
+}
+.confetti-enter-from,
+.confetti-leave-to {
+  opacity: 0;
+}
+
+/* Großes Stern-Emoji in der Mitte: hüpft kurz */
+.confetti-bounce {
+  animation: bounce-pop 0.8s ease-out;
+  filter: drop-shadow(0 4px 12px rgba(240, 168, 104, 0.6));
+}
+@keyframes bounce-pop {
+  0%   { transform: scale(0)   rotate(-30deg); opacity: 0; }
+  40%  { transform: scale(1.4) rotate(15deg);  opacity: 1; }
+  70%  { transform: scale(0.95) rotate(-5deg); opacity: 1; }
+  100% { transform: scale(1.1) rotate(0);     opacity: 0; }
+}
+
+/* Einzelne Konfetti-Partikel fliegen hoch und fallen leicht zur Seite */
+.confetti-particle {
+  top: 50%;
+  animation: particle-fly 1.1s ease-out forwards;
+  opacity: 0;
+}
+@keyframes particle-fly {
+  0%   { transform: translate(-50%, 0)         rotate(0);    opacity: 1; }
+  100% { transform: translate(-50%, -200px)    rotate(360deg); opacity: 0; }
 }
 </style>

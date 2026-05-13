@@ -21,10 +21,20 @@
           :class="['h-12 w-auto', view === 'exercise' ? 'mx-auto' : '']"
         />
 
-        <!-- App-Name (nur in Auswahl-Ansicht) -->
-        <div v-if="view === 'selection'" class="text-right">
-          <p class="text-lg font-bold text-plie-dark leading-tight">🩰 Plié AI</p>
-          <p class="text-xs text-plie-muted">Dein Ballett-Trainer</p>
+        <!-- App-Name + Hilfe-Button (nur in Auswahl-Ansicht) -->
+        <div v-if="view === 'selection'" class="flex items-center gap-2">
+          <div class="text-right">
+            <p class="text-lg font-bold text-plie-dark leading-tight">🩰 Plié AI</p>
+            <p class="text-xs text-plie-muted">Dein Ballett-Trainer</p>
+          </div>
+          <!-- Einstellungen: öffnet das Settings-Bottom-Sheet (enthält Hilfe, Adresse, Reset) -->
+          <button
+            aria-label="Einstellungen"
+            class="w-9 h-9 rounded-full bg-plie-apricot-light text-plie-apricot text-xl flex items-center justify-center active:scale-95 transition-transform"
+            @click="showSettings = true"
+          >
+            ⚙
+          </button>
         </div>
 
         <!-- Unsichtbarer Platzhalter (hält Layout im Übungs-Modus symmetrisch) -->
@@ -54,13 +64,22 @@
             v-for="pose in poses"
             :key="pose.id"
             :class="[
-              'rounded-2xl border-2 p-2 text-center transition-all duration-200 active:scale-95',
+              'relative rounded-2xl border-2 p-2 text-center transition-all duration-200 active:scale-95',
               selectedPose === pose.id
                 ? 'border-plie-apricot bg-plie-apricot-light shadow-md scale-[1.02]'
                 : 'border-plie-apricot-light bg-white hover:border-plie-apricot',
             ]"
             @click="selectedPose = pose.id"
           >
+            <!-- Fortschritts-Badge: zeigt geübte Reps oben rechts (nur wenn > 0) -->
+            <div
+              v-if="progress[pose.id]?.totalReps"
+              class="absolute -top-1 -right-1 bg-plie-apricot text-white text-xs font-bold rounded-full px-2 py-0.5 shadow-md flex items-center gap-0.5 z-10"
+            >
+              <span>✨</span>
+              <span>{{ progress[pose.id].totalReps }}</span>
+            </div>
+
             <img
               :src="`/pose_images/${pose.id}.jpg`"
               :alt="pose.label"
@@ -83,6 +102,15 @@
           @click="startExercise"
         >
           {{ selectedPose ? '▶ Übung starten' : 'Pose auswählen…' }}
+        </button>
+
+        <!-- Bericht an Lehrerin (nur sichtbar wenn mindestens eine Pose geübt wurde) -->
+        <button
+          v-if="hasAnyProgress()"
+          class="w-full py-3 rounded-2xl border-2 border-plie-rose text-plie-rose font-semibold text-sm active:scale-95 transition-transform"
+          @click="sendReport"
+        >
+          📧 Bericht an Ballettlehrerin senden
         </button>
       </template>
 
@@ -107,9 +135,29 @@
 
 
     <!-- ═══════════════════════════ FUSSZEILE ══════════════════════════════ -->
-    <footer v-if="view === 'selection'" class="text-center text-plie-muted text-xs py-3">
-      © 2025 Fabian Pingel · Plié AI v2.0
+    <footer v-if="view === 'selection'" class="text-center text-plie-muted text-xs py-3 space-y-1">
+      <p>
+        <span class="inline-block px-2 py-0.5 rounded-full bg-plie-rose/15 text-plie-rose font-semibold">
+          Beta · Private Demo
+        </span>
+      </p>
+      <p>© 2025 Fabian Pingel · Plié AI v2.0</p>
     </footer>
+
+    <!-- ═══════════════════════════ ONBOARDING-OVERLAY ═════════════════════ -->
+    <!-- Liegt z-50 über allem; wird beim ersten Start & via Settings-Menü aufgerufen. -->
+    <OnboardingScreen v-if="showOnboarding" @done="finishOnboarding" />
+
+    <!-- ═══════════════════════════ EINSTELLUNGEN ══════════════════════════ -->
+    <!-- Bottom-Sheet auf Mobile, zentriertes Modal auf Desktop. -->
+    <SettingsMenu
+      v-if="showSettings"
+      :teacher-email="teacherEmail"
+      @close="showSettings = false"
+      @show-onboarding="openOnboardingFromSettings"
+      @change-email="changeTeacherEmail"
+      @reset-progress="resetProgressFromSettings"
+    />
 
   </div>
 </template>
@@ -118,6 +166,18 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import CameraView from './components/CameraView.vue'
+import OnboardingScreen from './components/OnboardingScreen.vue'
+import SettingsMenu from './components/SettingsMenu.vue'
+import {
+  getAllProgress,
+  getTeacherEmail,
+  setTeacherEmail,
+  formatGermanDate,
+  hasSeenOnboarding,
+  markOnboardingSeen,
+  clearProgress,
+  type ProgressData,
+} from './core/storage'
 
 // ── Datenmodell ───────────────────────────────────────────────────────────────
 
@@ -144,6 +204,82 @@ const view         = ref<View>('selection')
 const selectedPose = ref<string | null>(null)
 const activePose   = ref<Pose | null>(null)
 
+// ── Fortschritt aus localStorage ──────────────────────────────────────────────
+
+/**
+ * Reaktiver Fortschritt aller Posen.
+ * Wird beim Start geladen und nach jeder Übung aktualisiert
+ * (damit Badges & Bericht aktuelle Reps zeigen).
+ */
+const progress = ref<ProgressData>(getAllProgress())
+
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+/**
+ * Sichtbarkeits-Flag für den Onboarding-Screen.
+ * - Beim ersten App-Start: true (Nutzer hat es noch nie bestätigt)
+ * - Späteres Öffnen: über das ?-Icon im Header
+ */
+const showOnboarding = ref<boolean>(!hasSeenOnboarding())
+
+/** Wird vom OnboardingScreen ausgelöst, wenn der Nutzer "Los geht's" drückt. */
+function finishOnboarding(): void {
+  markOnboardingSeen()
+  showOnboarding.value = false
+}
+
+// ── Einstellungs-Menü (Zahnrad oben rechts) ───────────────────────────────────
+
+/** Sichtbarkeits-Flag für das Settings-Bottom-Sheet. */
+const showSettings = ref<boolean>(false)
+
+/**
+ * Reaktive Kopie der Lehrerin-Adresse für die Anzeige im Menü.
+ * Wird beim Öffnen des Menüs und nach Änderungen neu eingelesen.
+ */
+const teacherEmail = ref<string | null>(getTeacherEmail())
+
+/** Öffnet das Onboarding vom Settings-Menü aus. */
+function openOnboardingFromSettings(): void {
+  showSettings.value = false
+  showOnboarding.value = true
+}
+
+/**
+ * Fragt die Lehrerin-Adresse über prompt() ab, mit der bestehenden
+ * Adresse als Default-Wert (= leichtes Editieren).
+ */
+function changeTeacherEmail(): void {
+  const current = getTeacherEmail() ?? ''
+  const input = window.prompt(
+    'E-Mail-Adresse der Ballettlehrerin:\n(wird nur lokal auf diesem Gerät gespeichert)',
+    current,
+  )
+  if (input === null) return  // Nutzer hat Abbrechen gedrückt
+  const trimmed = input.trim()
+  if (!trimmed.includes('@')) {
+    window.alert('Das sieht nicht wie eine gültige E-Mail-Adresse aus.')
+    return
+  }
+  setTeacherEmail(trimmed)
+  teacherEmail.value = trimmed
+}
+
+/**
+ * Löscht den gespeicherten Übungs-Fortschritt nach Rückfrage.
+ * Lehrerin-Adresse und Onboarding-Flag bleiben erhalten.
+ */
+function resetProgressFromSettings(): void {
+  const ok = window.confirm(
+    'Wirklich allen Übungs-Fortschritt löschen?\n\n' +
+    'Alle ✨-Sterne verschwinden. Diese Aktion kann nicht rückgängig gemacht werden.',
+  )
+  if (!ok) return
+  clearProgress()
+  progress.value = {}
+  showSettings.value = false
+}
+
 // ── Aktionen ──────────────────────────────────────────────────────────────────
 
 function startExercise(): void {
@@ -155,5 +291,73 @@ function startExercise(): void {
 function stopExercise(): void {
   view.value   = 'selection'
   activePose.value = null
+  // Fortschritt neu aus localStorage einlesen — der CameraView hat
+  // während der Übung addReps() aufgerufen, die Badges müssen die neuen Werte zeigen
+  progress.value = getAllProgress()
+}
+
+// ── Lehrerin-Bericht ──────────────────────────────────────────────────────────
+
+/**
+ * Erzeugt einen mailto-Link und öffnet das E-Mail-Programm.
+ *
+ * Holt die Lehrerin-Adresse aus localStorage. Falls noch keine gespeichert
+ * ist, wird per prompt() abgefragt und für künftige Berichte gemerkt.
+ */
+function sendReport(): void {
+  // E-Mail-Adresse der Lehrerin holen oder einmalig abfragen
+  let email = getTeacherEmail()
+  if (!email) {
+    const input = window.prompt(
+      'E-Mail-Adresse der Ballettlehrerin eingeben:\n' +
+      '(wird nur lokal auf diesem Gerät gespeichert)',
+      '',
+    )
+    if (!input) return  // Nutzer hat abgebrochen
+    email = input.trim()
+    if (!email.includes('@')) {
+      window.alert('Das sieht nicht wie eine gültige E-Mail-Adresse aus.')
+      return
+    }
+    setTeacherEmail(email)
+    teacherEmail.value = email  // reaktiven Wert für die Anzeige im Menü mit-aktualisieren
+  }
+
+  // Bericht-Text aus aktuellem Fortschritt zusammenbauen
+  const lines: string[] = []
+  for (const pose of poses) {
+    const p = progress.value[pose.id]
+    if (!p || p.totalReps === 0) continue
+    lines.push(`• ${pose.label}: ${p.totalReps}× (zuletzt ${formatGermanDate(p.lastDate)})`)
+  }
+  if (lines.length === 0) {
+    window.alert('Es wurden noch keine Posen geübt — bitte erst eine Übung machen.')
+    return
+  }
+
+  const body = [
+    'Hallo,',
+    '',
+    'mein Kind hat mit der Plié AI App geübt:',
+    '',
+    ...lines,
+    '',
+    'Viele Grüße',
+  ].join('\n')
+  const subject = 'Plié AI — Übungsfortschritt'
+
+  // mailto-URI öffnen (encodeURIComponent damit Umlaute & Zeilenumbrüche sauber sind)
+  window.location.href =
+    `mailto:${encodeURIComponent(email)}` +
+    `?subject=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(body)}`
+}
+
+/**
+ * Liefert true, wenn mindestens eine Pose geübt wurde —
+ * der Bericht-Button bleibt sonst ausgeblendet.
+ */
+function hasAnyProgress(): boolean {
+  return Object.values(progress.value).some(p => p.totalReps > 0)
 }
 </script>

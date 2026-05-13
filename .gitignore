@@ -21,3 +21,7 @@ Thumbs.db
 
 # Lokale Umgebungsvariablen (falls nötig)
 .env.local
+
+# Claude Code: lokale Einstellungen und Session-Resume-Dateien (nicht ins Repo)
+.claude/
+resume.md
