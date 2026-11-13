@@ -1,36 +1,37 @@
 /**
- * Wrapper um MediaPipe PoseLandmarker (tasks-vision).
+ * Wrapper around the MediaPipe PoseLandmarker (tasks-vision).
  *
- * Lädt das Modell beim ersten Aufruf von init() und erkennt danach
- * in jedem Video-Frame 33 Körperpunkte.
+ * Loads the model on the first call to init() and then detects 33 body
+ * landmarks in each video frame.
  *
- * WASM-Dateien: werden von der MediaPipe-CDN geladen (einmalig, danach gecacht).
- * Modell-Datei:  liegt lokal unter /models/pose_landmarker_full.task
+ * All files are served from the app's own origin: the WASM runtime is copied
+ * from node_modules to public/mediapipe/ on npm install (postinstall script),
+ * the model lives in public/models/. No request goes to a third-party server.
  */
 
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision'
 import type { PoseLandmarkerResult } from '@mediapipe/tasks-vision'
 
-// Re-Export für Komponenten die das Ergebnisformat brauchen
+// Re-Export für Komponenten, die das Ergebnisformat brauchen
 export type { PoseLandmarkerResult }
 
-/** CDN-Pfad für die MediaPipe WASM-Dateien (wird nach dem ersten Laden gecacht) */
-const MEDIAPIPE_WASM_URL =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm'
+/** Local path to the MediaPipe WASM files (copied by the postinstall script). */
+const MEDIAPIPE_WASM_PATH = '/mediapipe'
 
-/** Lokaler Pfad zum Modell (liegt in /public/models/) */
+/** Local path to the pose model (stored in public/models/). */
 const MODEL_PATH = '/models/pose_landmarker_full.task'
 
+/** Detects body landmarks in video frames with MediaPipe. */
 export class PoseDetector {
   private landmarker: PoseLandmarker | null = null
 
   /**
-   * Initialisiert den PoseLandmarker.
-   * Muss einmal vor detect() aufgerufen werden.
-   * Versucht zuerst GPU-Beschleunigung, fällt bei Fehler auf CPU zurück.
+   * Initialize the PoseLandmarker; must be called once before detect().
+   *
+   * Tries GPU acceleration first and falls back to the CPU on failure.
    */
   async init(): Promise<void> {
-    const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL)
+    const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH)
 
     const options = {
       baseOptions: { modelAssetPath: MODEL_PATH },
@@ -48,7 +49,7 @@ export class PoseDetector {
         baseOptions: { ...options.baseOptions, delegate: 'GPU' },
       })
     } catch {
-      // Fallback auf CPU wenn GPU nicht verfügbar
+      // Fallback auf CPU, wenn GPU nicht verfügbar
       this.landmarker = await PoseLandmarker.createFromOptions(vision, {
         ...options,
         baseOptions: { ...options.baseOptions, delegate: 'CPU' },
@@ -57,18 +58,18 @@ export class PoseDetector {
   }
 
   /**
-   * Erkennt Pose-Landmarks in einem Video-Frame.
+   * Detect pose landmarks in one video frame.
    *
-   * @param video     Das <video>-Element mit dem Kamera-Feed
-   * @param timestamp Aktueller Zeitstempel (performance.now()) — muss monoton steigen
-   * @returns         Erkannte Landmarks, oder null wenn nicht initialisiert
+   * @param video     The <video> element showing the camera feed.
+   * @param timestamp Current timestamp (performance.now()); must increase monotonically.
+   * @returns         Detected landmarks, or null if init() has not completed.
    */
   detect(video: HTMLVideoElement, timestamp: number): PoseLandmarkerResult | null {
     if (!this.landmarker) return null
     return this.landmarker.detectForVideo(video, timestamp)
   }
 
-  /** Gibt Ressourcen frei (beim Beenden der Komponente aufrufen). */
+  /** Release the landmarker's resources (call when the component unmounts). */
   close(): void {
     this.landmarker?.close()
     this.landmarker = null

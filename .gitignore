@@ -25,3 +25,12 @@ Thumbs.db
 # Claude Code: lokale Einstellungen und Session-Resume-Dateien (nicht ins Repo)
 .claude/
 resume.md
+
+# MediaPipe-WASM: wird bei npm install aus node_modules kopiert (postinstall),
+# damit die App keine Dateien von Fremd-Servern (CDN) nachlädt
+public/mediapipe/
+
+# Python-Caches (pytest, ruff)
+__pycache__/
+.pytest_cache/
+.ruff_cache/

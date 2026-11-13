@@ -71,11 +71,48 @@
             <span class="text-plie-muted">›</span>
           </button>
         </li>
+
+        <!-- Alle Daten löschen: entfernt auch die Lehrerin-Adresse (Recht auf Löschung) -->
+        <li>
+          <button
+            class="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-red-50 active:scale-[0.98] transition-all text-left"
+            @click="$emit('deleteAllData')"
+          >
+            <span class="text-2xl">🧹</span>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-red-600 text-sm">Alle Daten löschen</p>
+              <p class="text-xs text-plie-muted">Fortschritt und Lehrerin-Adresse</p>
+            </div>
+            <span class="text-plie-muted">›</span>
+          </button>
+        </li>
+
+        <!-- Rechtliches: normale Links auf die statischen Seiten -->
+        <li>
+          <a
+            href="/datenschutz.html"
+            class="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-plie-cream active:scale-[0.98] transition-all text-left"
+          >
+            <span class="text-2xl">🔒</span>
+            <span class="flex-1 font-semibold text-plie-dark text-sm">Datenschutz</span>
+            <span class="text-plie-muted">›</span>
+          </a>
+        </li>
+        <li>
+          <a
+            href="/impressum.html"
+            class="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-plie-cream active:scale-[0.98] transition-all text-left"
+          >
+            <span class="text-2xl">ℹ️</span>
+            <span class="flex-1 font-semibold text-plie-dark text-sm">Impressum</span>
+            <span class="text-plie-muted">›</span>
+          </a>
+        </li>
       </ul>
 
       <!-- Footer: App-Version -->
       <p class="text-center text-xs text-plie-muted mt-5">
-        Plié AI v2.0 · © 2025 Fabian Pingel
+        Plié AI v2.0 · © 2025–2026 Fabian Pingel
       </p>
 
     </div>
@@ -85,26 +122,27 @@
 
 <script setup lang="ts">
 /**
- * Einstellungs-Menü als Bottom-Sheet (Mobile) / zentriertes Modal (Desktop).
+ * Settings menu as a bottom sheet (mobile) or centered modal (desktop).
  *
- * Reine Anzeige-Komponente — alle Aktionen werden als Events an den Parent
- * (App.vue) weitergereicht, der die eigentliche Logik (Onboarding zeigen,
- * Adresse ändern, Fortschritt löschen) ausführt.
+ * Pure display component: every action is emitted to the parent (App.vue),
+ * which runs the actual logic (show onboarding, change address, delete data).
  */
 
 defineProps<{
-  /** Aktuell gespeicherte Lehrerin-E-Mail (null wenn noch nie eingetragen). */
+  /** Currently stored teacher e-mail (null if never entered). */
   teacherEmail: string | null
 }>()
 
 defineEmits<{
-  /** Menü schließen (Klick auf ✕ oder Hintergrund). */
+  /** Close the menu (click on ✕ or the backdrop). */
   close: []
-  /** Onboarding-Bildschirm öffnen. */
+  /** Open the onboarding screen. */
   showOnboarding: []
-  /** E-Mail-Adresse der Lehrerin ändern. */
+  /** Change the teacher's e-mail address. */
   changeEmail: []
-  /** Übungs-Fortschritt zurücksetzen (mit Bestätigung im Parent). */
+  /** Reset the exercise progress (the parent asks for confirmation). */
   resetProgress: []
+  /** Delete all locally stored data (the parent asks for confirmation). */
+  deleteAllData: []
 }>()
 </script>

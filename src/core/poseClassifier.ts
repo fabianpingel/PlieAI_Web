@@ -1,32 +1,33 @@
 /**
- * Pose-Klassifizierer auf Basis der Logistic-Regression-Gewichte aus dem Modell.
+ * Pose classifier based on the trained logistic regression weights.
  *
- * Logistic Regression ist: softmax(coef @ features + intercept)
- * Das ist eine einfache Matrix-Multiplikation — kein WASM, kein ONNX nötig.
- * Die Gewichte (14 KB JSON) werden einmalig geladen und gecacht.
+ * Logistic regression is softmax(coef @ features + intercept): a plain matrix
+ * multiplication, so neither WASM nor ONNX is needed. The weights (14 KB JSON)
+ * are loaded once and kept in memory.
  */
 
-/** Format der classifier.json-Datei (exportiert von tools/convert_model.py) */
+/** Shape of classifier.json (exported by tools/convert_model.py). */
 interface ClassifierWeights {
   coef:      number[][]  // Form: [n_classes][n_features] = [7][99]
   intercept: number[]    // Form: [n_classes] = [7]
   classes:   string[]    // Klassen-Namen in der Reihenfolge der Wahrscheinlichkeiten
 }
 
-/** Ergebnis einer Klassifizierung */
+/** Result of one classification. */
 export interface ClassificationResult {
-  /** Klassen-Name mit der höchsten Wahrscheinlichkeit */
+  /** Class name with the highest probability. */
   className: string
-  /** Wahrscheinlichkeit für jede Klasse (Summe = 1) */
+  /** Probability of each class (sums to 1). */
   probabilities: number[]
-  /** Klassen-Namen in derselben Reihenfolge wie probabilities */
+  /** Class names in the same order as probabilities. */
   classes: string[]
 }
 
 /**
- * Numerisch stabiler Softmax: verhindert Overflow bei großen Logit-Werten.
+ * Compute a numerically stable softmax that avoids overflow for large logits.
  *
- * @param logits Rohe Modell-Ausgaben vor Normalisierung
+ * @param logits Raw model outputs before normalization.
+ * @returns      Probabilities that sum to 1.
  */
 function softmax(logits: number[]): number[] {
   const max = Math.max(...logits)
@@ -35,13 +36,11 @@ function softmax(logits: number[]): number[] {
   return exps.map(e => e / sum)
 }
 
+/** Classifies normalized pose vectors into the trained ballet poses. */
 export class PoseClassifier {
   private weights: ClassifierWeights | null = null
 
-  /**
-   * Lädt die Modell-Gewichte aus /public/models/classifier.json.
-   * Muss einmal vor classify() aufgerufen werden.
-   */
+  /** Load the model weights from /models/classifier.json; call once before classify(). */
   async init(): Promise<void> {
     const response = await fetch('/models/classifier.json')
     if (!response.ok) throw new Error('Classifier-Gewichte konnten nicht geladen werden')
@@ -49,10 +48,10 @@ export class PoseClassifier {
   }
 
   /**
-   * Klassifiziert einen normalisierten Pose-Vektor.
+   * Classify a normalized pose vector.
    *
-   * @param features Float32Array mit 99 normalisierten Werten (Ausgabe des PoseEmbedders)
-   * @returns        Klassen-Name und Wahrscheinlichkeits-Verteilung
+   * @param features 99 normalized values (output of embedPose).
+   * @returns        Best class name and the full probability distribution.
    */
   classify(features: Float32Array): ClassificationResult {
     if (!this.weights) throw new Error('Classifier nicht initialisiert')
@@ -69,7 +68,7 @@ export class PoseClassifier {
     return { className: classes[maxIdx], probabilities, classes }
   }
 
-  /** Gibt die Wahrscheinlichkeit für eine bestimmte Klasse zurück. */
+  /** Look up the probability of one class in a classification result (0 if unknown). */
   getProbability(result: ClassificationResult, className: string): number {
     const idx = result.classes.indexOf(className)
     return idx >= 0 ? result.probabilities[idx] : 0

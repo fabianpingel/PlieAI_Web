@@ -1,25 +1,25 @@
 /**
- * Typsicherer localStorage-Zugriff für PlieAI.
+ * Type-safe localStorage access for PlieAI.
  *
- * Speichert pro Pose die Gesamt-Anzahl gehaltener Wiederholungen und
- * das Datum der letzten Übung. Zusätzlich die E-Mail-Adresse der
- * Ballettlehrerin (für den mailto-Bericht).
+ * Stores, per pose, the total number of held repetitions and the date of the
+ * last exercise, plus the ballet teacher's e-mail address (for the mailto
+ * report) and the onboarding flag. Nothing here ever leaves the device.
  *
- * Versionierte Schlüssel ('.v1'), damit zukünftige Datenmodell-Änderungen
- * über eine Migration sauber abgefangen werden können.
+ * Keys are versioned ('.v1') so future data model changes can be handled
+ * cleanly with a migration.
  */
 
 // ── Datenmodell ───────────────────────────────────────────────────────────────
 
-/** Fortschritt einer einzelnen Pose. */
+/** Progress of a single pose. */
 export interface PoseProgress {
-  /** Gesamt-Anzahl erfolgreich gehaltener Wiederholungen. */
+  /** Total number of successfully held repetitions. */
   totalReps: number
-  /** ISO-Datum der letzten Übung (Format YYYY-MM-DD). */
+  /** ISO date of the last exercise (format YYYY-MM-DD). */
   lastDate: string
 }
 
-/** Zuordnung Pose-ID → Fortschritt. */
+/** Mapping from pose ID to progress. */
 export type ProgressData = Record<string, PoseProgress>
 
 // ── localStorage-Schlüssel ────────────────────────────────────────────────────
@@ -31,22 +31,18 @@ const KEY_ONBOARDING_SEEN = 'plieai.onboardingSeen.v1'
 // ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 
 /**
- * Liefert das heutige Datum als ISO-String (YYYY-MM-DD).
+ * Return today's date as an ISO string.
  *
- * Returns:
- *     Datum im Format '2026-05-13'.
+ * @returns Date in the format '2026-05-13'.
  */
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
 /**
- * Liest und parst die ProgressData aus localStorage.
+ * Read and parse the stored progress.
  *
- * Gibt leeres Objekt zurück, falls noch nichts gespeichert oder JSON kaputt.
- *
- * Returns:
- *     ProgressData-Objekt (möglicherweise leer).
+ * @returns Progress of all poses; empty if nothing is stored or the JSON is broken.
  */
 function readProgress(): ProgressData {
   const raw = localStorage.getItem(KEY_PROGRESS)
@@ -54,12 +50,16 @@ function readProgress(): ProgressData {
   try {
     return JSON.parse(raw) as ProgressData
   } catch {
-    // Defekter JSON-Eintrag → frischer Start, damit App nicht crasht
+    // Defekter JSON-Eintrag → frischer Start, damit die App nicht abstürzt
     return {}
   }
 }
 
-/** Schreibt ProgressData zurück in localStorage. */
+/**
+ * Write the progress back to localStorage.
+ *
+ * @param data Progress of all poses.
+ */
 function writeProgress(data: ProgressData): void {
   localStorage.setItem(KEY_PROGRESS, JSON.stringify(data))
 }
@@ -67,11 +67,10 @@ function writeProgress(data: ProgressData): void {
 // ── Öffentliche API ───────────────────────────────────────────────────────────
 
 /**
- * Erhöht den Rep-Zähler für eine Pose und aktualisiert das Datum.
+ * Increase the rep counter of a pose and set its date to today.
  *
- * Args:
- *     poseId: Eindeutige Pose-Kennung (entspricht Eintrag in App.vue::poses).
- *     count:  Anzahl der hinzuzufügenden Reps (Standard: 1).
+ * @param poseId Unique pose ID (matches an entry of `poses` in App.vue).
+ * @param count  Number of reps to add.
  */
 export function addReps(poseId: string, count: number = 1): void {
   const data = readProgress()
@@ -84,13 +83,10 @@ export function addReps(poseId: string, count: number = 1): void {
 }
 
 /**
- * Holt den Fortschritt einer einzelnen Pose.
+ * Get the progress of a single pose.
  *
- * Args:
- *     poseId: Pose-Kennung.
- *
- * Returns:
- *     PoseProgress-Objekt, oder null wenn diese Pose noch nie geübt wurde.
+ * @param poseId Pose ID.
+ * @returns      Its progress, or null if the pose was never practiced.
  */
 export function getProgress(poseId: string): PoseProgress | null {
   const data = readProgress()
@@ -98,43 +94,37 @@ export function getProgress(poseId: string): PoseProgress | null {
 }
 
 /**
- * Liefert den kompletten Fortschritt aller Posen.
+ * Get the progress of all poses.
  *
- * Returns:
- *     ProgressData-Objekt mit allen geübten Posen.
+ * @returns Progress of every practiced pose.
  */
 export function getAllProgress(): ProgressData {
   return readProgress()
 }
 
 /**
- * Liest die gespeicherte Lehrerin-E-Mail.
+ * Read the stored teacher e-mail address.
  *
- * Returns:
- *     E-Mail-Adresse oder null wenn noch nicht gespeichert.
+ * @returns The address, or null if none was entered yet.
  */
 export function getTeacherEmail(): string | null {
   return localStorage.getItem(KEY_TEACHER_EMAIL)
 }
 
 /**
- * Speichert die Lehrerin-E-Mail.
+ * Store the teacher e-mail address.
  *
- * Args:
- *     email: E-Mail-Adresse als String.
+ * @param email The e-mail address.
  */
 export function setTeacherEmail(email: string): void {
   localStorage.setItem(KEY_TEACHER_EMAIL, email)
 }
 
 /**
- * Formatiert ein ISO-Datum (YYYY-MM-DD) in deutsche Kurzform (TT.MM.JJJJ).
+ * Format an ISO date (YYYY-MM-DD) as a short German date (DD.MM.YYYY).
  *
- * Args:
- *     iso: Datum im ISO-Format.
- *
- * Returns:
- *     Datum als '13.05.2026'.
+ * @param iso Date in ISO format.
+ * @returns   Date such as '13.05.2026'.
  */
 export function formatGermanDate(iso: string): string {
   const [y, m, d] = iso.split('-')
@@ -142,31 +132,37 @@ export function formatGermanDate(iso: string): string {
 }
 
 /**
- * Prüft, ob der Nutzer den Onboarding-Screen schon einmal gesehen
- * (und mit "Los geht's" bestätigt) hat.
+ * Check whether the user has already confirmed the onboarding screen.
  *
- * Returns:
- *     true wenn schon abgeschlossen, false beim allerersten Start.
+ * @returns true once confirmed, false on the very first start.
  */
 export function hasSeenOnboarding(): boolean {
   return localStorage.getItem(KEY_ONBOARDING_SEEN) === 'true'
 }
 
-/**
- * Markiert das Onboarding als gesehen — Aufruf wenn der Nutzer
- * den "Los geht's"-Button drückt.
- */
+/** Mark the onboarding as seen (called when the user taps "Los geht's"). */
 export function markOnboardingSeen(): void {
   localStorage.setItem(KEY_ONBOARDING_SEEN, 'true')
 }
 
 /**
- * Löscht den gespeicherten Übungs-Fortschritt aller Posen.
+ * Delete the stored exercise progress of all poses.
  *
- * Wird vom Einstellungs-Menü aufgerufen ("Fortschritt zurücksetzen").
- * Lehrerin-Adresse und Onboarding-Flag bleiben erhalten — die werden
- * separat verwaltet und sind keine Übungs-Daten.
+ * Called from the settings menu. The teacher address and the onboarding
+ * flag are kept: they are managed separately and are not exercise data.
  */
 export function clearProgress(): void {
   localStorage.removeItem(KEY_PROGRESS)
+}
+
+/**
+ * Delete everything PlieAI stores on this device.
+ *
+ * Removes progress, teacher address and onboarding flag, so the app behaves
+ * as on the very first start.
+ */
+export function clearAllData(): void {
+  localStorage.removeItem(KEY_PROGRESS)
+  localStorage.removeItem(KEY_TEACHER_EMAIL)
+  localStorage.removeItem(KEY_ONBOARDING_SEEN)
 }

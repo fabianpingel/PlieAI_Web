@@ -1,16 +1,16 @@
 /**
- * Exakt-Port des Python PoseEmbedder (modules/embedder.py).
+ * Exact port of the Python PoseEmbedder (modules/embedder.py).
  *
- * Normalisiert 33 MediaPipe-Landmarks so, dass Translation und Skalierung
- * des Körpers keinen Einfluss auf die Klassifizierung haben:
- *   1. Hüftmittelpunkt als Ursprung (0, 0, 0)
- *   2. Skalierung durch Posengröße (Torso-Größe × 2.5, mind. max. Landmark-Abstand)
- *   3. Runden auf 6 Nachkommastellen
+ * Normalizes 33 MediaPipe landmarks so that translation and scale of the
+ * body do not influence the classification:
+ *   1. Hip center becomes the origin (0, 0, 0)
+ *   2. Scale by pose size (torso size × 2.5, at least the max landmark distance)
+ *   3. Round to 6 decimal places
  *
- * Ausgabe-Vektor (99 Werte) muss mit den Trainings-Features des Classifiers übereinstimmen.
+ * The output vector (99 values) must match the classifier's training features.
  */
 
-/** Landmark-Indizes aus MediaPipe Pose */
+/** Landmark indices used from MediaPipe Pose. */
 const IDX = {
   leftShoulder:  11,
   rightShoulder: 12,
@@ -20,7 +20,7 @@ const IDX = {
 
 const TORSO_SIZE_MULTIPLIER = 2.5
 
-/** Ein MediaPipe-Landmark mit normalisierten Koordinaten [0..1] */
+/** A MediaPipe landmark with normalized coordinates in [0..1]. */
 export interface NormalizedLandmark {
   x: number
   y: number
@@ -28,40 +28,48 @@ export interface NormalizedLandmark {
   visibility?: number
 }
 
-/** Rückgabe des Embedders: flacher Vektor für Classifier + 2D-Array für Visualisierung */
+/** Embedder output: flat vector for the classifier plus a 2D array for visualization. */
 export interface EmbedderResult {
-  /** 99 normalisierte Werte (33 × xyz), direkt in den Classifier eingespeist */
+  /** 99 normalized values (33 × xyz), fed directly into the classifier. */
   flat: Float32Array
-  /** (33, 3) – normalisierte Koordinaten, für Abweichungs-Pfeile benötigt */
+  /** Normalized coordinates of shape (33, 3), used for the deviation arrows. */
   matrix: number[][]
 }
 
 /**
- * Mittelpunkt zwischen zwei Landmarks (beliebige Dimension).
+ * Compute the midpoint of two points of any dimension.
+ *
+ * @param a First point.
+ * @param b Second point.
+ * @returns The midpoint.
  */
 function midpoint(a: number[], b: number[]): number[] {
   return a.map((v, i) => (v + b[i]) * 0.5)
 }
 
 /**
- * Euklidische Norm eines Vektors.
+ * Compute the Euclidean norm of a vector.
+ *
+ * @param v The vector.
+ * @returns Its length.
  */
 function norm(v: number[]): number {
   return Math.sqrt(v.reduce((s, x) => s + x * x, 0))
 }
 
 /**
- * Normalisiert 33 Pose-Landmarks auf einen einheitlichen Raum.
+ * Normalize 33 pose landmarks into a common coordinate space.
  *
- * Reihenfolge entspricht exakt der Python-Implementierung:
- *   - Pixel-Koordinaten (x·w, y·h, z) berechnen
- *   - Hüfte als Ursprung setzen
- *   - Durch Posengröße dividieren (2D, wie in Python)
- *   - Auf 6 Dezimalstellen runden
+ * The steps follow the Python implementation exactly:
+ *   - compute pixel coordinates (x·w, y·h, z)
+ *   - move the hip center to the origin
+ *   - divide by the pose size (2D, as in Python)
+ *   - round to 6 decimal places
  *
- * @param landmarks   33 MediaPipe-Landmarks mit x,y,z in [0..1]
- * @param imageWidth  Breite des Kamera-Frames in Pixeln
- * @param imageHeight Höhe des Kamera-Frames in Pixeln
+ * @param landmarks   33 MediaPipe landmarks with x, y, z in [0..1].
+ * @param imageWidth  Width of the camera frame in pixels.
+ * @param imageHeight Height of the camera frame in pixels.
+ * @returns           Flat feature vector and (33, 3) matrix.
  */
 export function embedPose(
   landmarks: NormalizedLandmark[],

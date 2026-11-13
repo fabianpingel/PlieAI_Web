@@ -1,0 +1,14 @@
+# Alle Textdateien mit LF im Repository, unabhängig vom Betriebssystem
+* text=auto eol=lf
+
+# Windows-Skripte brauchen CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binärdateien nie umwandeln
+*.png binary
+*.jpg binary
+*.wasm binary
+*.task binary
+*.onnx binary

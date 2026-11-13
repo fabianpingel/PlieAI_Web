@@ -146,30 +146,30 @@ import {
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 
 const props = defineProps<{
-  /** Name der ausgewählten Ziel-Pose (muss mit Dateinamen in /poses/ übereinstimmen) */
+  /** Name of the selected target pose (must match a file name in /poses/). */
   targetPose: string
 }>()
 
 const emit = defineEmits<{
-  /** Ausgelöst wenn der Nutzer die Übung beendet */
+  /** Emitted when the user ends the exercise. */
   back: []
 }>()
 
 // ── Konstanten für den Rep-Zähler ─────────────────────────────────────────────
 
-/** Wie oft die Pose gehalten werden muss um die Übung abzuschließen. */
+/** How often the pose must be held to complete the exercise. */
 const TARGET_REPS = 5
 
-/** Mindest-Konfidenz (0..1) damit eine Pose als korrekt gilt. */
+/** Minimum confidence (0..1) for a pose to count as correct. */
 const HOLD_THRESHOLD = 0.70
 
-/** Wie lange die Konfidenz durchgehend über der Schwelle liegen muss (in ms). */
+/** How long the confidence must stay above the threshold without interruption (ms). */
 const HOLD_DURATION_MS = 3000
 
-/** Dauer der Konfetti-Animation nach erfolgreichem Rep (in ms). */
+/** Duration of the confetti animation after a successful rep (ms). */
 const CONFETTI_DURATION_MS = 1200
 
-/** Emojis für den Konfetti-Burst (zufällige Auswahl wird gerendert). */
+/** Emojis rendered in the confetti burst. */
 const confettiEmojis: string[] = ['🌟', '⭐', '✨', '🎀', '💫', '🌸', '⭐', '✨', '🌟']
 
 // ── Status der Komponente ─────────────────────────────────────────────────────
@@ -179,25 +179,25 @@ const status = ref<Status>('loading')
 
 // ── Rep-Zähler Zustand ────────────────────────────────────────────────────────
 
-/** Anzahl erfolgreich gehaltener Posen in dieser Übungs-Session. */
+/** Number of successfully held poses in this exercise session. */
 const reps = ref<number>(0)
 
-/** Halte-Fortschritt 0..1 — wird im Ring um den Rep-Zähler angezeigt. */
+/** Hold progress 0..1, shown as the ring around the rep counter. */
 const holdProgress = ref<number>(0)
 
-/** Konfetti-Burst sichtbar (kurz nach jedem erfolgreichen Rep). */
+/** Whether the confetti burst is visible (briefly after each rep). */
 const showConfetti = ref<boolean>(false)
 
-/** Erfolgs-Screen sichtbar (nach Erreichen von TARGET_REPS). */
+/** Whether the success screen is visible (after TARGET_REPS). */
 const showSuccess = ref<boolean>(false)
 
 /**
- * Zeitstempel (timestamp aus requestAnimationFrame) an dem die Pose
- * erstmals über der Schwelle lag. null = aktuell nicht im Halte-Zustand.
+ * requestAnimationFrame timestamp at which the pose first exceeded the
+ * threshold; null while the pose is not being held.
  */
 let holdStartTime: number | null = null
 
-/** Icon und Text je nach Status */
+/** Status icon for the loading/error overlay. */
 const statusIcon = computed(() => ({
   loading: '⏳',
   running: '',
@@ -228,8 +228,11 @@ const classifier = new PoseClassifier()
 let referencePose: number[][] | null = null
 
 /**
- * Lädt die Referenz-Pose für die ausgewählte Übung.
- * Die JSON-Dateien wurden von tools/convert_poses.py aus den .npy-Dateien erzeugt.
+ * Load the reference pose of the selected exercise.
+ *
+ * The JSON files were generated from .npy files by tools/convert_poses.py.
+ *
+ * @param poseName Pose ID (file name without extension).
  */
 async function loadReferencePose(poseName: string): Promise<void> {
   const response = await fetch(`/poses/${encodeURIComponent(poseName)}.json`)
@@ -242,12 +245,14 @@ async function loadReferencePose(poseName: string): Promise<void> {
 let cameraStream: MediaStream | null = null
 
 /**
- * Öffnet die Kamera mit schrittweise lockerer werdenden Constraints.
+ * Open the camera with progressively looser constraints.
  *
- * Fallback-Kette:
- *   1. Front-Kamera (Smartphones) mit idealer Auflösung
- *   2. Beliebige Kamera mit idealer Auflösung (Desktop-Webcam)
- *   3. Beliebige verfügbare Kamera ohne Einschränkungen
+ * Fallback chain:
+ *   1. Front camera (smartphones) with the ideal resolution
+ *   2. Any camera with the ideal resolution (desktop webcam)
+ *   3. Any available camera without constraints
+ *
+ * The stream is only drawn onto a local canvas; no frame leaves the device.
  */
 async function startCamera(): Promise<void> {
   const attempts = [
@@ -308,7 +313,7 @@ async function startCamera(): Promise<void> {
   canvas.height = video.videoHeight
 }
 
-/** Stoppt den Kamera-Stream. */
+/** Stop all tracks of the camera stream. */
 function stopCamera(): void {
   cameraStream?.getTracks().forEach(t => t.stop())
   cameraStream = null
@@ -316,17 +321,19 @@ function stopCamera(): void {
 
 // ── Erkennungs-Schleife ───────────────────────────────────────────────────────
 
-/** Flag das die Schleife kontrolliert – false = Schleife anhalten */
+/** Whether the detection loop keeps running; false stops it. */
 let loopActive = false
 
 /**
- * Haupt-Schleife: läuft mit requestAnimationFrame (~60fps).
+ * Run one step of the main loop, driven by requestAnimationFrame (~60 fps).
  *
- * Pro Frame:
- *   1. Kamerabild auf Canvas zeichnen
- *   2. MediaPipe Pose-Erkennung
- *   3. Landmarks → PoseEmbedder → PoseClassifier
- *   4. Visualisierung (Skelett, Pfeile, Konfidenz-Balken)
+ * Per frame:
+ *   1. Draw the camera image onto the canvas
+ *   2. Detect the pose with MediaPipe
+ *   3. Landmarks → embedPose → PoseClassifier
+ *   4. Visualize (skeleton, arrows, confidence bar)
+ *
+ * @param timestamp Frame timestamp from requestAnimationFrame.
  */
 function detectionLoop(timestamp: DOMHighResTimeStamp): void {
   if (!loopActive) return
@@ -393,16 +400,14 @@ function detectionLoop(timestamp: DOMHighResTimeStamp): void {
 // ── Rep-Zähler Logik ──────────────────────────────────────────────────────────
 
 /**
- * Wird in jedem Frame der Erkennungs-Schleife aufgerufen.
+ * Update the rep counter; called once per frame of the detection loop.
  *
- * Wenn die Konfidenz für die Ziel-Pose über HOLD_THRESHOLD liegt, läuft
- * ein Timer. Übersteigt die ununterbrochene Haltezeit HOLD_DURATION_MS,
- * wird ein Rep gezählt und Konfetti gezeigt. Bei jedem Frame unter der
- * Schwelle wird der Timer zurückgesetzt.
+ * While the confidence of the target pose is above HOLD_THRESHOLD a timer
+ * runs. Once the uninterrupted hold time exceeds HOLD_DURATION_MS, a rep is
+ * counted and confetti is shown. Any frame below the threshold resets the timer.
  *
- * Args:
- *     confidence: Aktuelle Konfidenz der Ziel-Pose (0..1).
- *     timestamp: requestAnimationFrame-Zeitstempel in Millisekunden.
+ * @param confidence Current confidence of the target pose (0..1).
+ * @param timestamp  requestAnimationFrame timestamp in milliseconds.
  */
 function updateRepCounter(confidence: number, timestamp: DOMHighResTimeStamp): void {
   // Wenn Ziel bereits erreicht oder Erfolgs-Screen offen ist → nichts tun
@@ -438,13 +443,13 @@ function updateRepCounter(confidence: number, timestamp: DOMHighResTimeStamp): v
   }
 }
 
-/** Zeigt den Konfetti-Burst kurz an. */
+/** Show the confetti burst briefly. */
 function triggerConfetti(): void {
   showConfetti.value = true
   setTimeout(() => { showConfetti.value = false }, CONFETTI_DURATION_MS)
 }
 
-/** Setzt Rep-Zähler komplett zurück (für "Nochmal"-Button und Pose-Wechsel). */
+/** Reset the rep counter completely ("Nochmal" button and pose change). */
 function resetReps(): void {
   reps.value = 0
   holdStartTime = null
@@ -468,7 +473,7 @@ onMounted(async () => {
     status.value = 'running'
     requestAnimationFrame(detectionLoop)
   } catch (err) {
-    console.error('Initialisierungsfehler:', err)
+    console.error('Initialization failed:', err)
     errorMessage.value = err instanceof Error
       ? err.message
       : 'Kamera oder Modell konnte nicht geladen werden.'
