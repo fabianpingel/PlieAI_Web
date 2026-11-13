@@ -135,13 +135,20 @@
 
 
     <!-- ═══════════════════════════ FUSSZEILE ══════════════════════════════ -->
-    <footer v-if="view === 'selection'" class="text-center text-plie-muted text-xs py-3 space-y-1">
-      <p>
+    <!-- Immer sichtbar (auch während der Übung): Impressum und Datenschutz
+         müssen von jeder Seite aus mit einem Klick erreichbar sein (§ 5 DDG, Art. 13 DSGVO). -->
+    <footer class="text-center text-plie-muted text-xs py-3 space-y-1">
+      <p v-if="view === 'selection'">
         <span class="inline-block px-2 py-0.5 rounded-full bg-plie-rose/15 text-plie-rose font-semibold">
           Beta · Private Demo
         </span>
       </p>
-      <p>© 2025 Fabian Pingel · Plié AI v2.0</p>
+      <p>
+        <a href="/impressum.html" class="underline hover:text-plie-dark">Impressum</a>
+        ·
+        <a href="/datenschutz.html" class="underline hover:text-plie-dark">Datenschutz</a>
+      </p>
+      <p>© 2025–2026 Fabian Pingel · PINGEL AI Solutions · Plié AI v2.0</p>
     </footer>
 
     <!-- ═══════════════════════════ ONBOARDING-OVERLAY ═════════════════════ -->
@@ -157,6 +164,7 @@
       @show-onboarding="openOnboardingFromSettings"
       @change-email="changeTeacherEmail"
       @reset-progress="resetProgressFromSettings"
+      @delete-all-data="deleteAllDataFromSettings"
     />
 
   </div>
@@ -176,14 +184,18 @@ import {
   hasSeenOnboarding,
   markOnboardingSeen,
   clearProgress,
+  clearAllData,
   type ProgressData,
 } from './core/storage'
 
 // ── Datenmodell ───────────────────────────────────────────────────────────────
 
+/** A selectable ballet pose. */
 interface Pose {
-  id:    string  // Dateiname (ohne Endung) in /pose_images/ und /poses/
-  label: string  // Anzeigename
+  /** File name (without extension) in /pose_images/ and /poses/. */
+  id:    string
+  /** Display name. */
+  label: string
 }
 
 const poses: Pose[] = [
@@ -207,22 +219,23 @@ const activePose   = ref<Pose | null>(null)
 // ── Fortschritt aus localStorage ──────────────────────────────────────────────
 
 /**
- * Reaktiver Fortschritt aller Posen.
- * Wird beim Start geladen und nach jeder Übung aktualisiert
- * (damit Badges & Bericht aktuelle Reps zeigen).
+ * Reactive progress of all poses.
+ *
+ * Loaded on start and refreshed after each exercise so that badges and
+ * the report show the current reps.
  */
 const progress = ref<ProgressData>(getAllProgress())
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
 
 /**
- * Sichtbarkeits-Flag für den Onboarding-Screen.
- * - Beim ersten App-Start: true (Nutzer hat es noch nie bestätigt)
- * - Späteres Öffnen: über das ?-Icon im Header
+ * Whether the onboarding screen is visible.
+ *
+ * True on the very first start; later it is opened from the settings menu.
  */
 const showOnboarding = ref<boolean>(!hasSeenOnboarding())
 
-/** Wird vom OnboardingScreen ausgelöst, wenn der Nutzer "Los geht's" drückt. */
+/** Close the onboarding and remember it (user tapped "Los geht's"). */
 function finishOnboarding(): void {
   markOnboardingSeen()
   showOnboarding.value = false
@@ -230,25 +243,19 @@ function finishOnboarding(): void {
 
 // ── Einstellungs-Menü (Zahnrad oben rechts) ───────────────────────────────────
 
-/** Sichtbarkeits-Flag für das Settings-Bottom-Sheet. */
+/** Whether the settings bottom sheet is visible. */
 const showSettings = ref<boolean>(false)
 
-/**
- * Reaktive Kopie der Lehrerin-Adresse für die Anzeige im Menü.
- * Wird beim Öffnen des Menüs und nach Änderungen neu eingelesen.
- */
+/** Reactive copy of the teacher address for display in the settings menu. */
 const teacherEmail = ref<string | null>(getTeacherEmail())
 
-/** Öffnet das Onboarding vom Settings-Menü aus. */
+/** Open the onboarding from the settings menu. */
 function openOnboardingFromSettings(): void {
   showSettings.value = false
   showOnboarding.value = true
 }
 
-/**
- * Fragt die Lehrerin-Adresse über prompt() ab, mit der bestehenden
- * Adresse als Default-Wert (= leichtes Editieren).
- */
+/** Ask for the teacher address via prompt(), prefilled with the current one. */
 function changeTeacherEmail(): void {
   const current = getTeacherEmail() ?? ''
   const input = window.prompt(
@@ -266,8 +273,9 @@ function changeTeacherEmail(): void {
 }
 
 /**
- * Löscht den gespeicherten Übungs-Fortschritt nach Rückfrage.
- * Lehrerin-Adresse und Onboarding-Flag bleiben erhalten.
+ * Delete the stored exercise progress after confirmation.
+ *
+ * Teacher address and onboarding flag are kept.
  */
 function resetProgressFromSettings(): void {
   const ok = window.confirm(
@@ -280,14 +288,36 @@ function resetProgressFromSettings(): void {
   showSettings.value = false
 }
 
+/**
+ * Delete all data PlieAI stores on this device after confirmation.
+ *
+ * Removes progress, teacher address and onboarding flag; the onboarding
+ * is shown again as on the very first start.
+ */
+function deleteAllDataFromSettings(): void {
+  const ok = window.confirm(
+    'Wirklich alle gespeicherten Daten löschen?\n\n' +
+    'Fortschritt und Lehrerin-Adresse werden von diesem Gerät entfernt. ' +
+    'Diese Aktion kann nicht rückgängig gemacht werden.',
+  )
+  if (!ok) return
+  clearAllData()
+  progress.value = {}
+  teacherEmail.value = null
+  showSettings.value = false
+  showOnboarding.value = true
+}
+
 // ── Aktionen ──────────────────────────────────────────────────────────────────
 
+/** Switch to the exercise view for the selected pose. */
 function startExercise(): void {
   if (!selectedPose.value) return
   activePose.value = poses.find(p => p.id === selectedPose.value) ?? null
   view.value = 'exercise'
 }
 
+/** Return to the pose selection and reload the progress. */
 function stopExercise(): void {
   view.value   = 'selection'
   activePose.value = null
@@ -299,10 +329,11 @@ function stopExercise(): void {
 // ── Lehrerin-Bericht ──────────────────────────────────────────────────────────
 
 /**
- * Erzeugt einen mailto-Link und öffnet das E-Mail-Programm.
+ * Build a mailto link with the progress report and open the mail program.
  *
- * Holt die Lehrerin-Adresse aus localStorage. Falls noch keine gespeichert
- * ist, wird per prompt() abgefragt und für künftige Berichte gemerkt.
+ * Uses the stored teacher address; if there is none yet, asks for it via
+ * prompt() and remembers it for future reports. The app itself sends
+ * nothing: the user's own mail program sends the message.
  */
 function sendReport(): void {
   // E-Mail-Adresse der Lehrerin holen oder einmalig abfragen
@@ -354,8 +385,9 @@ function sendReport(): void {
 }
 
 /**
- * Liefert true, wenn mindestens eine Pose geübt wurde —
- * der Bericht-Button bleibt sonst ausgeblendet.
+ * Check whether at least one pose was practiced (otherwise the report button is hidden).
+ *
+ * @returns true if any pose has reps.
  */
 function hasAnyProgress(): boolean {
   return Object.values(progress.value).some(p => p.totalReps > 0)

@@ -1,15 +1,15 @@
 /**
- * Canvas-Rendering für Pose-Visualisierung.
+ * Canvas rendering for the pose visualization.
  *
- * Zeichnet Skelett, farbige Abweichungs-Pfeile und Konfidenz-Balken
- * direkt auf einen Canvas-2D-Kontext.
+ * Draws the skeleton, colored deviation arrows and the confidence bar
+ * directly onto a 2D canvas context.
  *
- * Pfeile: Grün = nah an Referenz, Rot = weit weg → exakt wie in visualizer.py
+ * Arrows: green = close to the reference, red = far away (as in visualizer.py).
  */
 
 import type { NormalizedLandmark } from './poseEmbedder'
 
-/** MediaPipe Pose-Verbindungen: [von, zu] als Landmark-Index-Paare */
+/** MediaPipe Pose connections as [from, to] landmark index pairs. */
 export const POSE_CONNECTIONS: [number, number][] = [
   // Gesicht
   [0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8],
@@ -28,13 +28,13 @@ export const POSE_CONNECTIONS: [number, number][] = [
 ]
 
 /**
- * Zeichnet das Kamerabild auf den Canvas (gespiegelt für Selfie-Ansicht).
+ * Draw the camera image onto the canvas, mirrored for a selfie view.
  *
- * @param ctx     Canvas-Kontext
- * @param video   Das <video>-Element
- * @param w       Canvas-Breite
- * @param h       Canvas-Höhe
- * @param mirror  true = Bild horizontal spiegeln (Selfie-Modus)
+ * @param ctx     Canvas context.
+ * @param video   The <video> element.
+ * @param w       Canvas width.
+ * @param h       Canvas height.
+ * @param mirror  Flip the image horizontally (selfie mode).
  */
 export function drawVideoFrame(
   ctx: CanvasRenderingContext2D,
@@ -53,12 +53,12 @@ export function drawVideoFrame(
 }
 
 /**
- * Zeichnet das Pose-Skelett (Linien zwischen Landmarks).
+ * Draw the pose skeleton as lines and dots between visible landmarks.
  *
- * @param ctx       Canvas-Kontext
- * @param landmarks 33 MediaPipe-Landmarks mit x,y in [0..1]
- * @param w         Canvas-Breite
- * @param h         Canvas-Höhe
+ * @param ctx       Canvas context.
+ * @param landmarks 33 MediaPipe landmarks with x, y in [0..1].
+ * @param w         Canvas width.
+ * @param h         Canvas height.
  */
 export function drawSkeleton(
   ctx: CanvasRenderingContext2D,
@@ -91,20 +91,20 @@ export function drawSkeleton(
 }
 
 /**
- * Zeichnet Abweichungs-Pfeile zwischen aktueller und Referenz-Pose.
+ * Draw deviation arrows between the current pose and the reference pose.
  *
- * Entspricht visualizer.py draw_pose_deviation():
- *   - Pfeil-Ursprung: aktuelles Landmark (Pixel-Position)
- *   - Pfeil-Richtung: (ref_embedding - current_embedding) × scale
- *   - Farbe: Grün = kleine Abweichung, Rot = große Abweichung
+ * Mirrors draw_pose_deviation() in visualizer.py:
+ *   - arrow origin: current landmark (pixel position)
+ *   - arrow direction: (ref_embedding - current_embedding) × scale
+ *   - color: green = small deviation, red = large deviation
  *
- * @param ctx             Canvas-Kontext
- * @param landmarks       Aktuelle MediaPipe-Landmarks [0..1]
- * @param refMatrix       Referenz-Embedding (33×3), aus poses/*.json
- * @param currentMatrix   Aktuelles Embedding (33×3), Ausgabe des PoseEmbedders
- * @param w               Canvas-Breite
- * @param h               Canvas-Höhe
- * @param scale           Verstärkungs-Faktor für Pfeil-Länge
+ * @param ctx             Canvas context.
+ * @param landmarks       Current MediaPipe landmarks in [0..1].
+ * @param refMatrix       Reference embedding (33×3) from poses/*.json.
+ * @param currentMatrix   Current embedding (33×3) from embedPose.
+ * @param w               Canvas width.
+ * @param h               Canvas height.
+ * @param scale           Amplification factor for the arrow length.
  */
 export function drawDeviationArrows(
   ctx: CanvasRenderingContext2D,
@@ -149,7 +149,14 @@ export function drawDeviationArrows(
 }
 
 /**
- * Zeichnet einen Pfeil von (x0, y0) nach (x1, y1).
+ * Draw an arrow from (x0, y0) to (x1, y1).
+ *
+ * @param ctx   Canvas context.
+ * @param x0    Start x.
+ * @param y0    Start y.
+ * @param x1    End x (arrow head).
+ * @param y1    End y (arrow head).
+ * @param color CSS color for line and head.
  */
 function drawArrow(
   ctx: CanvasRenderingContext2D,
@@ -180,13 +187,13 @@ function drawArrow(
 }
 
 /**
- * Zeichnet den Konfidenz-Balken für die Ziel-Pose.
+ * Draw the confidence bar for the target pose.
  *
- * @param ctx        Canvas-Kontext
- * @param poseName   Name der Ziel-Pose
- * @param confidence Wahrscheinlichkeit [0..1]
- * @param w          Canvas-Breite
- * @param h          Canvas-Höhe
+ * @param ctx        Canvas context.
+ * @param poseName   Name of the target pose.
+ * @param confidence Probability in [0..1].
+ * @param w          Canvas width.
+ * @param h          Canvas height.
  */
 export function drawConfidenceBar(
   ctx: CanvasRenderingContext2D,
@@ -226,11 +233,11 @@ export function drawConfidenceBar(
 }
 
 /**
- * Zeigt einen Warnhinweis an wenn zu wenige Landmarks erkannt wurden.
+ * Draw a hint box when too few landmarks were detected.
  *
- * @param ctx Canvas-Kontext
- * @param w   Canvas-Breite
- * @param h   Canvas-Höhe
+ * @param ctx Canvas context.
+ * @param w   Canvas width.
+ * @param h   Canvas height.
  */
 export function drawNotDetected(
   ctx: CanvasRenderingContext2D,

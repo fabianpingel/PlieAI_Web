@@ -1,25 +1,24 @@
-"""
-Konvertiert das trainierte sklearn-Modell (Logistic Regression) von .pkl nach .onnx.
+"""Convert the trained sklearn logistic regression from .pkl to ONNX and JSON weights.
 
-Warum ONNX?
-  .pkl (Pickle) kann nur von Python geladen werden und ist ein Sicherheitsrisiko
-  (beliebiger Code kann beim Laden ausgeführt werden). ONNX ist ein offenes,
-  sicheres Format das auch im Browser läuft (via onnxruntime-web).
+Pickle can only be loaded by Python and may execute arbitrary code on load. ONNX
+is an open format kept as a backup; the browser uses the plain JSON weights.
 
-Verwendung:
-  uv run python convert_model.py
+Usage:
+    uv run python convert_model.py
 """
+
 from __future__ import annotations
 
-import pickle
+import json
 import pathlib
+import pickle
+
 import numpy as np
+import onnxruntime as rt
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
-import onnxruntime as rt
 
-
-# Pfade — relativ zu diesem Script
+# Pfade — relativ zu diesem Skript
 TOOLS_DIR = pathlib.Path(__file__).parent
 PROJECT_DIR = TOOLS_DIR.parent
 SOURCE_PKL = pathlib.Path(r"D:\PlieAI_2.0\classifiers\Logistic Regression.pkl")
@@ -27,35 +26,32 @@ OUTPUT_ONNX = PROJECT_DIR / "public" / "models" / "logistic_regression.onnx"
 
 
 def load_and_inspect_model(pkl_path: pathlib.Path) -> object:
-    """
-    Lädt das sklearn-Modell und gibt Informationen darüber aus.
+    """Load the sklearn model and print its classes and feature count.
 
     Args:
-        pkl_path: Pfad zur .pkl-Datei.
+        pkl_path: Path to the .pkl file.
 
     Returns:
-        Das geladene sklearn-Modell.
+        The loaded sklearn model.
     """
     with open(pkl_path, "rb") as f:
         model = pickle.load(f)
 
-    print(f"Modell-Typ:   {type(model).__name__}")
-    print(f"Klassen:      {list(model.classes_)}")
-    print(f"Features:     {model.n_features_in_}")
+    print(f"Model type: {type(model).__name__}")
+    print(f"Classes:    {list(model.classes_)}")
+    print(f"Features:   {model.n_features_in_}")
     return model
 
 
 def convert_to_onnx(model: object, output_path: pathlib.Path) -> None:
-    """
-    Konvertiert ein sklearn-Modell in das ONNX-Format.
+    """Convert a sklearn model to ONNX.
 
-    Der Eingang hat die Form (batch_size, 99):
-    - 33 Körperpunkte × 3 Koordinaten (x, y, z) = 99 normalisierte Werte.
-    - None als batch_size bedeutet: beliebige Anzahl Eingaben gleichzeitig.
+    The input has shape (batch_size, 99): 33 landmarks x 3 coordinates (x, y, z).
+    A batch size of None allows any number of inputs at once.
 
     Args:
-        model: Das geladene sklearn-Modell.
-        output_path: Ziel-Pfad für die .onnx-Datei.
+        model: The loaded sklearn model.
+        output_path: Target path of the .onnx file.
     """
     # None = flexible Batch-Größe, 99 = Anzahl der Features
     initial_type = [("float_input", FloatTensorType([None, 99]))]
@@ -64,81 +60,72 @@ def convert_to_onnx(model: object, output_path: pathlib.Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "wb") as f:
         f.write(onnx_model.SerializeToString())
-    print(f"ONNX gespeichert: {output_path}")
+    print(f"ONNX saved: {output_path}")
 
 
 def verify_onnx(onnx_path: pathlib.Path, model: object) -> None:
-    """
-    Verifiziert das ONNX-Modell mit einem Zufalls-Input und vergleicht
-    die Ausgabe mit dem Original-sklearn-Modell.
+    """Compare ONNX predictions with the original sklearn model on random input.
 
     Args:
-        onnx_path: Pfad zur gespeicherten .onnx-Datei.
-        model: Das Original-sklearn-Modell zum Vergleich.
+        onnx_path: Path of the saved .onnx file.
+        model: The original sklearn model.
 
     Raises:
-        AssertionError: Wenn Vorhersagen abweichen.
+        AssertionError: If the predictions differ.
     """
-    # Zufälligen Input erzeugen (wie ein normalisierter Pose-Vektor)
+    # Zufälliger Input, ähnlich einem normalisierten Pose-Vektor
     rng = np.random.default_rng(42)
     test_input = rng.standard_normal((3, 99)).astype(np.float32)
 
-    # ONNX-Vorhersage
     sess = rt.InferenceSession(str(onnx_path))
     input_name = sess.get_inputs()[0].name
     onnx_pred = sess.run(None, {input_name: test_input})[0]
 
-    # sklearn-Vorhersage
     sklearn_pred = model.predict(test_input)
 
     assert list(onnx_pred) == list(sklearn_pred), (
-        f"Abweichung! ONNX: {onnx_pred}, sklearn: {sklearn_pred}"
+        f"Mismatch! ONNX: {onnx_pred}, sklearn: {sklearn_pred}"
     )
-    print(f"Verifikation OK - Beispiel-Vorhersagen: {list(onnx_pred)}")
+    print(f"Verification OK - sample predictions: {list(onnx_pred)}")
 
 
 def export_weights_json(model: object, output_path: pathlib.Path) -> None:
-    """
-    Exportiert die Gewichte der Logistic Regression als JSON.
+    """Export the logistic regression weights as compact JSON for the browser.
 
-    Warum JSON statt ONNX?
-      Logistic Regression ist f(x) = softmax(coef @ x + intercept).
-      Die Gewichte sind 7x99 = 693 Zahlen — ein winziges JSON.
-      Kein WASM nötig, kein Browser-Kompatibilitätsproblem.
+    Logistic regression is softmax(coef @ x + intercept); the 7x99 weights make a
+    tiny JSON file that needs neither WASM nor ONNX in the browser.
 
-    JSON-Struktur:
-      coef:      [[...], ...] — Form (n_classes, n_features)
-      intercept: [...]        — Form (n_classes,)
-      classes:   [...]        — Klassen-Namen in Reihenfolge der Wahrscheinlichkeiten
+    JSON structure:
+        coef: shape (n_classes, n_features)
+        intercept: shape (n_classes,)
+        classes: class names in the order of the probabilities
 
     Args:
-        model: Das geladene sklearn-Modell.
-        output_path: Ziel-Pfad für die .json-Datei.
+        model: The loaded sklearn model.
+        output_path: Target path of the .json file.
     """
-    import json
     weights = {
-        "coef":      model.coef_.tolist(),
+        "coef": model.coef_.tolist(),
         "intercept": model.intercept_.tolist(),
-        "classes":   model.classes_.tolist(),
+        "classes": model.classes_.tolist(),
     }
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(weights, f, separators=(",", ":"))
     size_kb = output_path.stat().st_size / 1024
-    print(f"JSON gespeichert: {output_path.name} ({size_kb:.1f} KB)")
+    print(f"JSON saved: {output_path.name} ({size_kb:.1f} KB)")
 
 
 if __name__ == "__main__":
-    print("=== Modell-Konvertierung ===")
-    print(f"Quelle: {SOURCE_PKL}")
+    print("=== Model conversion ===")
+    print(f"Source: {SOURCE_PKL}")
 
     model = load_and_inspect_model(SOURCE_PKL)
 
-    # ONNX (als Backup gespeichert, wird im Browser nicht verwendet)
+    # ONNX nur als Backup, im Browser wird es nicht verwendet
     convert_to_onnx(model, OUTPUT_ONNX)
     verify_onnx(OUTPUT_ONNX, model)
 
-    # JSON-Gewichte fuer reines JavaScript
-    output_json = PROJECT_DIR / "public" / "models" / "classifier.json"
-    export_weights_json(model, output_json)
+    # JSON-Gewichte für reines TypeScript
+    export_weights_json(model, PROJECT_DIR / "public" / "models" / "classifier.json")
 
-    print("\nFertig!")
+    print("\nDone!")

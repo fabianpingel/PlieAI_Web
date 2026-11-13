@@ -3,10 +3,11 @@
 #
 # Ablauf:
 #   1. Code auschecken
-#   2. Node.js installieren
-#   3. npm install (Abhängigkeiten laden)
-#   4. npm run build (App bauen → dist/ Ordner)
-#   5. dist/ Ordner auf GitHub Pages hochladen
+#   2. Lint und Tests (tools/)
+#   3. Node.js installieren
+#   4. npm ci (Abhängigkeiten laden, kopiert MediaPipe-WASM nach public/mediapipe/)
+#   5. npm run build (App bauen → dist/ Ordner)
+#   6. dist/ Ordner auf GitHub Pages hochladen
 
 name: Deploy to GitHub Pages
 
@@ -39,6 +40,18 @@ jobs:
       # Code aus dem Repository laden
       - name: Code auschecken
         uses: actions/checkout@v4
+
+      # Statische Prüfungen (JSDoc, keine Fremd-Ressourcen, Rechtsseiten verlinkt):
+      # schlägt einer fehl, wird nicht deployt
+      - name: uv einrichten
+        uses: astral-sh/setup-uv@v6
+
+      - name: Lint und Tests
+        working-directory: tools
+        run: |
+          uv sync --frozen
+          uv run ruff check .
+          uv run python -m pytest tests/ -v
 
       # Node.js in Version 22 installieren (mit npm-Cache für schnellere Builds)
       - name: Node.js einrichten

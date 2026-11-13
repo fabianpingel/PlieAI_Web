@@ -9,10 +9,22 @@ export default defineConfig({
     tailwindcss(),
   ],
 
-  // Verhindert, dass Vite diese Pakete umbaut —
-  // beide enthalten WebAssembly-Code, der direkte Dateipfade benötigt
+  build: {
+    rollupOptions: {
+      // Mehrseitiger Build: Impressum und Datenschutz sind eigene statische Seiten,
+      // damit sie direkt verlinkbar sind und auch ohne laufende App funktionieren
+      input: {
+        main: 'index.html',
+        impressum: 'impressum.html',
+        datenschutz: 'datenschutz.html',
+      },
+    },
+  },
+
+  // Verhindert, dass Vite MediaPipe umbaut: das Paket lädt seine WebAssembly-Dateien
+  // über direkte Pfade (siehe src/core/poseDetector.ts)
   optimizeDeps: {
-    exclude: ['onnxruntime-web', '@mediapipe/tasks-vision'],
+    exclude: ['@mediapipe/tasks-vision'],
   },
 
   server: {

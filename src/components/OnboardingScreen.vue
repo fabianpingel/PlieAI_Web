@@ -3,7 +3,7 @@
     Onboarding-Overlay: erklärt Plié AI in einem einzigen scrollbaren Screen.
 
     Wird beim allerersten Start automatisch gezeigt (Flag in localStorage)
-    und kann über das ?-Icon im Header jederzeit wieder geöffnet werden.
+    und kann über das Einstellungs-Menü (⚙) jederzeit wieder geöffnet werden.
 
     Vollbild-Overlay mit Verlauf-Hintergrund, scrollt auf kleinen Geräten.
   -->
@@ -35,6 +35,8 @@
               <p class="text-xs text-plie-dark/70 mt-1 leading-relaxed">
                 Kein Bild und kein Video verlässt jemals dein Gerät.
                 Die Pose-Erkennung läuft komplett im Browser.
+                Mehr dazu in der
+                <a href="/datenschutz.html" class="underline">Datenschutzerklärung</a>.
               </p>
             </div>
           </div>
@@ -96,7 +98,14 @@
       </button>
 
       <p class="text-xs text-plie-dark/60 text-center mt-4">
-        Diesen Bildschirm findest du jederzeit über das ?-Symbol oben rechts.
+        Diesen Bildschirm findest du jederzeit über das ⚙-Symbol oben rechts.
+      </p>
+
+      <!-- Auch über dem Onboarding müssen Impressum und Datenschutz erreichbar sein -->
+      <p class="text-xs text-plie-dark/60 text-center mt-3">
+        <a href="/impressum.html" class="underline">Impressum</a>
+        ·
+        <a href="/datenschutz.html" class="underline">Datenschutz</a>
       </p>
 
     </div>
@@ -105,11 +114,15 @@
 
 
 <script setup lang="ts">
-// Reine Anzeige-Komponente — kein lokaler Zustand nötig.
-// Der Parent (App.vue) entscheidet wann sie gezeigt wird und reagiert auf 'done'.
+/**
+ * Onboarding overlay explaining Plié AI on a single scrollable screen.
+ *
+ * Pure display component: the parent (App.vue) decides when to show it
+ * and reacts to 'done'.
+ */
 
 defineEmits<{
-  /** Nutzer hat "Los geht's" gedrückt — Parent soll Overlay schließen und Flag setzen. */
+  /** User tapped "Los geht's"; the parent closes the overlay and sets the flag. */
   done: []
 }>()
 </script>
